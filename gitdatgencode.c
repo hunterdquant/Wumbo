@@ -7,7 +7,7 @@ main() {
 }
 
 f() {
-	int y;
-	scanf("%d", &y);
+	int x;
+	scanf("%d",&x);
 }
 

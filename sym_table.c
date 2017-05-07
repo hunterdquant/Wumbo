@@ -59,7 +59,8 @@ sym_node_t *search_stack_func(sym_stack_t *s, char *sym) {
 sym_table_t *init_sym_table() {
     int i;
     sym_table_t *tmp = (sym_table_t*) malloc(sizeof(sym_table_t));
-    tmp->offset = 0;
+    tmp->loc_offset = 0;
+    tmp->arg_offset = 0;
     for (i = 0; i < HASH_SIZE; i++) {
         tmp->table[i] = NULL;
     }
@@ -70,8 +71,14 @@ sym_node_t *table_put(sym_table_t *t, sym_node_t *node) {
     int hash = hashpjw(node->sym);
     sym_node_t *cur = t->table[hash];
     if (cur != NULL) {
+        if (node == cur) {
+            return node;
+        }
         while (cur->next != NULL) {
             cur = cur->next;
+            if (node == cur) {
+                return node;
+            }
         }
         cur->next = node;
         cur = cur->next;
@@ -131,7 +138,7 @@ void destroy_sym_table(sym_table_t *table) {
     }
     for (i = 0; i < HASH_SIZE; i++) {
         if (table->table[i]) {
-            destroy_sym_node(table->table[i]->next);
+            destroy_sym_node(table->table[i]);
         }
     }
     free(table);

@@ -104,10 +104,6 @@ program:
 		gen_code_main(wout, name);
 		gen_code_prologue(wout, "main");
 
-		proc_type_t *main = init_proc_type(init_data_type_list(init_data_type(SIMPLE_SYM, (void *)NULL)));
-		sym_node_t *node = init_sym_node(name, PROC_NODE, main, 0);
-		table_put(sym_table->scope, node);
-		sym_table->sym_ref = node;
 		id_list_t *id_list = $4;
 		int in = 0, out = 0;
 		while (id_list) {
@@ -129,9 +125,6 @@ program:
 		destroy_id_list($4);
 	}
 	declarations 
-	subprogram_declarations 
-	compound_statement 
-	'.'
 	{
 		char *name;
 		if (!strcmp($2, "main")) {
@@ -139,18 +132,33 @@ program:
 		} else {
 			name = $2;
 		}
+		proc_type_t *main = init_proc_type(init_data_type_list(init_data_type(SIMPLE_SYM, (void *)NULL)));
+		sym_node_t *node = init_sym_node(name, PROC_NODE, main, sym_table->scope->loc_offset);
+		table_put(sym_table->scope, node);
+		sym_table->sym_ref = node;
+	}
+	subprogram_declarations 
+	compound_statement 
+	'.'
+	{
 
+		if (!strcmp($2, "main")) {
+			sym_table->sym_ref->sym = "main1";
+		} else {
+			sym_table->sym_ref->sym = $2;
+		}
+		char *name = sym_table->sym_ref->sym;
 		$$ = sym_table;
 		wprintf("\n");
-		print_stmt_tree($10, 0);
-		semantic_check_body(sym_table, sym_table->sym_ref, $10);
+		print_stmt_tree($11, 0);
+		semantic_check_body(sym_table, sym_table->sym_ref, $11);
 		gen_code_prelude(wout, name);
-		gen_code_func_begin(wout, name);
-		gen_code_compound_stmt(wout, $10);
+		gen_code_func_begin(wout, sym_table->sym_ref);
+		gen_code_stmt(wout, $11);
 		gen_code_func_end(wout);
 		gen_code_prologue(wout, name);
 		gen_code_end(wout);
-		destroy_stmt($10);
+		destroy_stmt($11);
 		destroy_sym_stack(sym_table);
 	}
 	;
@@ -161,9 +169,12 @@ identifier_list: ID
 	}
 	| identifier_list ',' ID
 	{
-		id_list_t *tmp = init_id_list($3);
-		tmp->next = $1;
-		$$ = tmp;
+		id_list_t *tmp = $1;
+		while (tmp->next) {
+			tmp = tmp->next;
+		}
+		tmp->next = init_id_list($3);
+		$$ = $1;
 	}
 	| empty
 	{
@@ -180,8 +191,8 @@ declarations: declarations VAR identifier_list ':' type ';'
 			if (table_get(sym_table->scope, list->id)) {
 				panic("\nSymbol, %s, is defined more than once at line number %d.\n", list->id, LINE_COUNT);
 			}
-			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, $5, sym_table->scope->offset);
-			sym_table->scope->offset+=4;
+			sym_table->scope->loc_offset-=8;
+			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, $5, sym_table->scope->loc_offset);
 			table_put(sym_table->scope, node);
 			list = list->next;
 		}
@@ -217,11 +228,17 @@ subprogram_declarations: subprogram_declarations subprogram_declaration ';'
 
 subprogram_declaration: subprogram_head declarations subprogram_declarations compound_statement
 	{
+		print_stmt_tree($4, 0);
 		int check = semantic_check_body(sym_table, sym_table->sym_ref, $4);
 		if (!check) {
 			panic("\nFunction is missing a return statement, line %d\n", LINE_COUNT);
 		}
-		print_stmt_tree($4, 0);
+		char *name = sym_table->sym_ref->sym;
+		gen_code_prelude(wout, name);
+		gen_code_func_begin(wout, sym_table->sym_ref);
+		gen_code_stmt(wout, $4);
+		gen_code_func_end(wout);
+		gen_code_prologue(wout, name);
 		destroy_sym_stack(stack_pop(&sym_table));
 		destroy_stmt($4);
 	};
@@ -237,7 +254,7 @@ subprogram_head: FUNCTION ID
 	{
 		sym_stack_t *tmp = stack_pop(&sym_table);
 		func_type_t *func = init_func_type($4, $6);
-		sym_node_t *node = init_sym_node(strdup($2), FUNC_NODE, func, sym_table->scope->offset);
+		sym_node_t *node = init_sym_node(strdup($2), FUNC_NODE, func, sym_table->scope->loc_offset);
 		table_put(sym_table->scope, node);
 		sym_table = stack_push(sym_table, tmp->scope, table_put(sym_table->scope, node));
 	}
@@ -253,7 +270,7 @@ subprogram_head: FUNCTION ID
 	{
 		sym_stack_t *tmp = stack_pop(&sym_table);
 		proc_type_t *proc = init_proc_type($4);
-		sym_node_t *node = init_sym_node(strdup($2), PROC_NODE, proc, sym_table->scope->offset);
+		sym_node_t *node = init_sym_node(strdup($2), PROC_NODE, proc, sym_table->scope->loc_offset);
 		sym_table = stack_push(sym_table, tmp->scope, table_put(sym_table->scope, node));
 	}
 	;
@@ -273,8 +290,8 @@ parameter_list: identifier_list ':' type
 		data_type_t *type = $3;
 		id_list_t *list = $1;
 		while (list) {
-			sym_table->scope->offset-=4;
-			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, type, sym_table->scope->offset);
+			sym_table->scope->arg_offset+=8;
+			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, type, sym_table->scope->arg_offset);
 			table_put(sym_table->scope, node);
 			list = list->next;
 		}
@@ -295,7 +312,8 @@ parameter_list: identifier_list ':' type
 		data_type_t *type = $5;
 		id_list_t *list = $3;
 		while (list) {
-			sym_node_t *node = init_sym_node(strdup(list->id), PRIM_NODE, type, sym_table->scope->offset);
+			sym_table->scope->arg_offset+=8;
+			sym_node_t *node = init_sym_node(strdup(list->id), PRIM_NODE, type, sym_table->scope->arg_offset);
 			table_put(sym_table->scope, node);
 			list = list->next;
 		}
@@ -342,9 +360,12 @@ statement_list: statement
 		$$ = init_stmt_list($1);
 	}
 	| statement_list ';' statement {
-		stmt_list_t *tmp = init_stmt_list($3);
-		tmp->next = $1;
-		$$ = tmp;
+		stmt_list_t *tmp = $1;
+		while (tmp->next) {
+			tmp = tmp->next;	
+		}
+		tmp->next = init_stmt_list($3);
+		$$ = $1;
 	}
 	;
 
@@ -466,9 +487,12 @@ expression_list: expression
 	}
 	| expression_list ',' expression
 	{
-		exp_list_t *tmp = init_exp_list($3);
-		tmp->next = $1;
-		$$ = tmp;
+		exp_list_t *tmp = $1;
+		while(tmp->next) {
+			tmp = tmp->next;	
+		}
+		tmp->next = init_exp_list($3);
+		$$ = $1;
 	}
 	| empty
 	{
@@ -502,8 +526,8 @@ simple_expression: term
 	{
 		exp_node_t *node = init_exp_node(OP_EXP, (void *)$2);
 		$$ = init_exp_tree(node);
-		$$->right = $1;
-		$$->left = $3;
+		$$->right = $3;
+		$$->left = $1;
 	}
 	;
 
@@ -515,8 +539,8 @@ term: factor
 	{
 		exp_node_t *node = init_exp_node(OP_EXP, (void *)$2);
 		$$ = init_exp_tree(node);
-		$$->right = $1;
-		$$->left = $3;
+		$$->right = $3;
+		$$->left = $1;
 	}
 	;
 

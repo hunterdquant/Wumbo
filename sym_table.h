@@ -20,7 +20,8 @@ typedef struct node_s {
 } sym_node_t;
 
 typedef struct table_s {
-    long int offset;
+    long int loc_offset;
+    long int arg_offset;
     sym_node_t *table[HASH_SIZE];
 } sym_table_t;
 

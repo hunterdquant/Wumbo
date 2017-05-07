@@ -69,7 +69,7 @@ void print_exp_tree(exp_tree_t *tree, int spaces) {
             if (!node->func_exp->sym_ref) {
                 panic("Undeclared function. Line:%d\n", LINE_COUNT);
             }
-            wprintf("[FUNC:%s]", node->func_exp->sym_ref->sym);
+            wprintf("[FUNC:%s]\n", node->func_exp->sym_ref->sym);
             while (tmp) {
                 print_exp_tree(tmp->exp, spaces+4);
                 tmp = tmp->next;
@@ -190,6 +190,7 @@ exp_node_t *init_exp_node(exp_type type, void *val) {
 exp_tree_t *init_exp_tree(exp_node_t *node) {
     exp_tree_t *tmp = (exp_tree_t *)malloc(sizeof(exp_tree_t));
     tmp->node = node;
+    tmp->label = 0;
     tmp->left = NULL;
     tmp->right = NULL;
     return tmp;
