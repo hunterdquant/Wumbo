@@ -254,7 +254,7 @@ subprogram_head: FUNCTION ID
 	{
 		sym_stack_t *tmp = stack_pop(&sym_table);
 		func_type_t *func = init_func_type($4, $6);
-		sym_node_t *node = init_sym_node(strdup($2), FUNC_NODE, func, sym_table->scope->loc_offset);
+		sym_node_t *node = init_sym_node(strdup($2), FUNC_NODE, func, 0);
 		table_put(sym_table->scope, node);
 		sym_table = stack_push(sym_table, tmp->scope, table_put(sym_table->scope, node));
 	}
@@ -270,7 +270,7 @@ subprogram_head: FUNCTION ID
 	{
 		sym_stack_t *tmp = stack_pop(&sym_table);
 		proc_type_t *proc = init_proc_type($4);
-		sym_node_t *node = init_sym_node(strdup($2), PROC_NODE, proc, sym_table->scope->loc_offset);
+		sym_node_t *node = init_sym_node(strdup($2), PROC_NODE, proc, 0);
 		sym_table = stack_push(sym_table, tmp->scope, table_put(sym_table->scope, node));
 	}
 	;
@@ -508,8 +508,8 @@ expression: simple_expression
 	{
 		exp_node_t *node = init_exp_node(OP_EXP, (void *)$2);
 		$$ = init_exp_tree(node);
-		$$->right = $1;
-		$$->left = $3;
+		$$->right = $3;
+		$$->left = $1;
 	}
 	;
 

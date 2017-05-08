@@ -1,13 +1,10 @@
 program main( input, output );
   var n: integer;
-  function fact(n:integer):integer;
+  function foo(n:integer):integer;
   begin
-	if (n <= 0) then
-        fact := 1
-    else
-        fact := n*fact(n-1)
+	foo := n
   end;
 begin
     read(n);
-    write(n*n)
+    write(foo(n))
 end.

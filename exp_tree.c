@@ -49,7 +49,7 @@ void print_exp_tree(exp_tree_t *tree, int spaces) {
                     wprintf("[not]");
                     break;
                 default:
-                    wprintf("Not type found for OP_EXP");
+                    wprintf("No type found for OP_EXP");
             }
             break;
         case INTEGER_EXP:

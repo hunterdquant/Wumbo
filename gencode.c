@@ -65,6 +65,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
         } else if (tree->node->type == REAL_EXP) {
             panic("\nGencode doesn't support reals.\n");
         } else if (tree->node->type == FUNC_EXP) {
+            gen_code_exp_func(out, tree);
         } else if (tree->node->type == VAR_EXP) {
             wfprintf(out, "\tmovq\t%d(%%rbp),\t%s\n", tree->node->sym_ref->offset, regs[gen_code_stack_peek()]);
         } else if (tree->node->type == ARRAY_EXP) {
@@ -120,7 +121,22 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-            case NOT_OP:
+                if (tree->right->node->type == INTEGER_EXP) {
+                    wfprintf(out, "\tmovq\t$%d,%%rax\n", tree->right->node->ival);
+                    wfprintf(out, "\tcmp\t%%rax,\t%s\n", regs[gen_code_stack_peek()]);
+                } else if (tree->right->node->type == REAL_EXP) {
+                    panic("\nGencode doesn't support reals.\n");
+                } else if (tree->right->node->type == FUNC_EXP) {
+                    gen_code_exp_func(out, tree->right);
+                    wfprintf(out, "\tcmp\t%s,\t%%rax\n", regs[gen_code_stack_peek()], tree->right->node->ival);
+                } else if (tree->right->node->type == VAR_EXP) {
+                    wfprintf(out, "\tcmp\t%d(%%rbp),\t%s\n", regs[gen_code_stack_peek()], tree->right->node->sym_ref->offset);
+                } else if (tree->right->node->type == ARRAY_EXP) {
+                    panic("\nGencode doesn't support arrays.\n");
+                } else {
+                    panic("\nUnxepected leaf node for expression in gencode.\n");
+                }
+                break;
             default:
                 panic("\nUnxepected operator for expression in gencode.\n");
         }
@@ -154,7 +170,8 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-            case NOT_OP:
+                wfprintf(out, "\tcmp\t%s,\t%s\n", regs[gen_code_stack_peek()], regs[r]);
+                break;
             default:
                 panic("\nUnxepected operator for expression in gencode.\n");
         }
@@ -190,7 +207,8 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-            case NOT_OP:
+                wfprintf(out, "\tcmp\t%s,\t%s\n", regs[r], regs[gen_code_stack_peek()]);
+                break;
             default:
                 panic("\nUnxepected operator for expression in gencode.\n");
         }
@@ -264,23 +282,142 @@ void gen_code_stmt(FILE *out, stmt_t *stmt) {
             wprintf("Unrecognized stmt type\n");
     }
 }
-void gen_code_if_stmt(FILE *out, stmt_t *stmt) {
 
+void gen_code_if_stmt(FILE *out, stmt_t *stmt) {
+    if (stmt->type != IF_STMT) {
+        panic("\nError in if gencode, expected proc.\n");
+    }
+    exp_tree_t *tree = stmt->stmt.if_stmt.exp;
+    gen_code_exp(out, tree);
+    if (tree->node->type != OP_EXP) {
+        panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
+    }
+    // Avoids label conflict with recursive calls.
+    int loc_label = label;
+    label+=2;
+    switch (tree->node->op) {
+        case EQ_OP:
+            wfprintf(out, "\tje\t.L%d\n", loc_label);
+            break;
+        case NEQ_OP:
+            wfprintf(out, "\tjne\t.L%d\n", loc_label);
+            break;
+        case L_OP:
+            wfprintf(out, "\tjl\t.L%d\n", loc_label);
+            break;
+        case G_OP:
+            wfprintf(out, "\tjg\t.L%d\n", loc_label);
+            break;
+        case LE_OP:
+            wfprintf(out, "\tjle\t.L%d\n", loc_label);
+            break;
+        case GE_OP:
+            wfprintf(out, "\tjge\t.L%d\n", loc_label);
+            break;
+        default:
+            panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
+    }
+    if (stmt->stmt.if_stmt.false_stmt) {
+        gen_code_stmt(out, stmt->stmt.if_stmt.false_stmt);
+    }
+    wfprintf(out, "\tjmp\t.L%d\n", loc_label+1);
+    wfprintf(out, ".L%d:\n", loc_label);
+    loc_label++;
+    gen_code_stmt(out, stmt->stmt.if_stmt.true_stmt);
+    wfprintf(out, ".L%d:\n", loc_label);
 }
 
 void gen_code_assign_stmt(FILE *out, stmt_t *stmt) {
     sym_node_t *node = stmt->stmt.assn_stmt.sym_ref;
     exp_tree_t *tree = stmt->stmt.assn_stmt.exp;
     gen_code_exp(out, tree);
-    wfprintf(out, "\tmovq\t%s,\t%d(%%rbp)", regs[gen_code_stack_peek()], node->offset);
+    if (node->ntype == FUNC_NODE) {
+        wfprintf(out, "\tmovq\t%s,\t%%rax\n", regs[gen_code_stack_peek()]);
+    } else {
+        wfprintf(out, "\tmovq\t%s,\t%d(%%rbp)\n", regs[gen_code_stack_peek()], node->offset);
+    }
 }
 
 void gen_code_while_stmt(FILE *out, stmt_t *stmt) {
-
+    if (stmt->type != WHILE_STMT) {
+        panic("\nError in while gencode, expected proc.\n");
+    }
+    exp_tree_t *tree = stmt->stmt.while_stmt.exp;
+    if (tree->node->type != OP_EXP) {
+        panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
+    }
+    int loc_label = label;
+    label+=2;
+    wfprintf(out, ".L%d:\n", loc_label);
+    gen_code_exp(out, tree);
+    // Avoids label conflict with recursive calls.
+    switch (tree->node->op) {
+        case EQ_OP:
+            wfprintf(out, "\tjne\t.L%d\n", loc_label+1);
+            break;
+        case NEQ_OP:
+            wfprintf(out, "\tje\t.L%d\n", loc_label+1);
+            break;
+        case L_OP:
+            wfprintf(out, "\tjge\t.L%d\n", loc_label+1);
+            break;
+        case G_OP:
+            wfprintf(out, "\tjle\t.L%d\n", loc_label+1);
+            break;
+        case LE_OP:
+            wfprintf(out, "\tjg\t.L%d\n", loc_label+1);
+            break;
+        case GE_OP:
+            wfprintf(out, "\tjl\t.L%d\n", loc_label+1);
+            break;
+        default:
+            panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
+    }
+    gen_code_stmt(out, stmt->stmt.while_stmt.body_stmt);
+    wfprintf(out, "\tjmp\t.L%d\n", loc_label);
+    wfprintf(out, ".L%d:\n", loc_label+1);
 }
 
 void gen_code_for_stmt(FILE *out, stmt_t *stmt) {
-
+    if (stmt->type != FOR_STMT) {
+        panic("\nError in for gencode, expected proc.\n");
+    }
+    gen_code_assign_stmt(out, stmt->stmt.for_stmt.assign_stmt);
+    exp_tree_t *tree = stmt->stmt.for_stmt.exp_bound;
+    if (tree->node->type != OP_EXP) {
+        panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
+    }
+    int loc_label = label;
+    label+=2;
+    wfprintf(out, ".L%d:\n", loc_label);
+    gen_code_exp(out, tree);
+    // Avoids label conflict with recursive calls.
+    switch (tree->node->op) {
+        case EQ_OP:
+            wfprintf(out, "\tjne\t.L%d\n", loc_label+1);
+            break;
+        case NEQ_OP:
+            wfprintf(out, "\tje\t.L%d\n", loc_label+1);
+            break;
+        case L_OP:
+            wfprintf(out, "\tjge\t.L%d\n", loc_label+1);
+            break;
+        case G_OP:
+            wfprintf(out, "\tjle\t.L%d\n", loc_label+1);
+            break;
+        case LE_OP:
+            wfprintf(out, "\tjg\t.L%d\n", loc_label+1);
+            break;
+        case GE_OP:
+            wfprintf(out, "\tjl\t.L%d\n", loc_label+1);
+            break;
+        default:
+            panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
+    }
+    gen_code_stmt(out, stmt->stmt.while_stmt.body_stmt);
+    wfprintf(out, "\taddq\t$1,\t$%d(%%rbp)\n", stmt->stmt.for_stmt.assign_stmt->stmt.assn_stmt.sym_ref->offset);
+    wfprintf(out, "\tjmp\t.L%d\n", loc_label);
+    wfprintf(out, ".L%d:\n", loc_label+1);
 }
 
 void gen_code_proc_stmt(FILE *out, stmt_t *stmt) {
