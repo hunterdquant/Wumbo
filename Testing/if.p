@@ -1,7 +1,7 @@
 program main( input, output );
   var a: integer;
 begin
-  a := 0;
+  read(a);
   if (a < 10) then
     a := 1
   else

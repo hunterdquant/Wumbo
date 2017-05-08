@@ -60,7 +60,7 @@ sym_table_t *init_sym_table() {
     int i;
     sym_table_t *tmp = (sym_table_t*) malloc(sizeof(sym_table_t));
     tmp->loc_offset = 0;
-    tmp->arg_offset = 0;
+    tmp->arg_offset = 8;
     for (i = 0; i < HASH_SIZE; i++) {
         tmp->table[i] = NULL;
     }

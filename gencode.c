@@ -170,7 +170,8 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-                wfprintf(out, "\tcmp\t%s,\t%s\n", regs[gen_code_stack_peek()], regs[r]);
+                wprintf("case 3");
+                wfprintf(out, "\tcmp\t%s,\t%s\n", regs[r], regs[gen_code_stack_peek()]);
                 break;
             default:
                 panic("\nUnxepected operator for expression in gencode.\n");
@@ -207,7 +208,8 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-                wfprintf(out, "\tcmp\t%s,\t%s\n", regs[r], regs[gen_code_stack_peek()]);
+                wprintf("case 4");
+                wfprintf(out, "\tcmp\t%s,\t%s\n", regs[gen_code_stack_peek()], regs[r]);
                 break;
             default:
                 panic("\nUnxepected operator for expression in gencode.\n");
@@ -237,12 +239,17 @@ void gen_code_exp_op_tree(FILE *out, char * op, exp_tree_t *tree) {
 
 void gen_code_exp_func(FILE *out, exp_tree_t *tree) {
     exp_list_t *exp_list = tree->node->func_exp->args;
-    while (exp_list) {
-        gen_code_exp(out, exp_list->exp);
-        wfprintf(out, "\tpushq\t%s\n", regs[gen_code_stack_peek()]);
-        exp_list = exp_list->next;
-    }
+    gen_code_exp_list_push(out, exp_list);
     wfprintf(out, "\tcall\t%s\n", tree->node->func_exp->sym_ref->sym);
+}
+
+void gen_code_exp_list_push(FILE *out, exp_list_t *exp_list) {
+    if (!exp_list) {
+        return;
+    }
+    gen_code_exp_list_push(out, exp_list->next);
+    gen_code_exp(out, exp_list->exp);
+    wfprintf(out, "\tpushq\t%s\n", regs[gen_code_stack_peek()]);
 }
 
 void gen_code_exp_op_regs(FILE *out, char *op,  int r1, int r2) {
@@ -384,38 +391,15 @@ void gen_code_for_stmt(FILE *out, stmt_t *stmt) {
     }
     gen_code_assign_stmt(out, stmt->stmt.for_stmt.assign_stmt);
     exp_tree_t *tree = stmt->stmt.for_stmt.exp_bound;
-    if (tree->node->type != OP_EXP) {
-        panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
-    }
     int loc_label = label;
     label+=2;
     wfprintf(out, ".L%d:\n", loc_label);
     gen_code_exp(out, tree);
     // Avoids label conflict with recursive calls.
-    switch (tree->node->op) {
-        case EQ_OP:
-            wfprintf(out, "\tjne\t.L%d\n", loc_label+1);
-            break;
-        case NEQ_OP:
-            wfprintf(out, "\tje\t.L%d\n", loc_label+1);
-            break;
-        case L_OP:
-            wfprintf(out, "\tjge\t.L%d\n", loc_label+1);
-            break;
-        case G_OP:
-            wfprintf(out, "\tjle\t.L%d\n", loc_label+1);
-            break;
-        case LE_OP:
-            wfprintf(out, "\tjg\t.L%d\n", loc_label+1);
-            break;
-        case GE_OP:
-            wfprintf(out, "\tjl\t.L%d\n", loc_label+1);
-            break;
-        default:
-            panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
-    }
-    gen_code_stmt(out, stmt->stmt.while_stmt.body_stmt);
-    wfprintf(out, "\taddq\t$1,\t$%d(%%rbp)\n", stmt->stmt.for_stmt.assign_stmt->stmt.assn_stmt.sym_ref->offset);
+    wfprintf(out, "\tcmp\t\t%d(%%rbp),%s\n", stmt->stmt.for_stmt.assign_stmt->stmt.assn_stmt.sym_ref->offset, regs[gen_code_stack_peek()]);
+    wfprintf(out, "\tjle\t.L%d\n", loc_label+1);
+    gen_code_stmt(out, stmt->stmt.for_stmt.body_stmt);
+    wfprintf(out, "\taddq\t$1,\t%d(%%rbp)\n", stmt->stmt.for_stmt.assign_stmt->stmt.assn_stmt.sym_ref->offset);
     wfprintf(out, "\tjmp\t.L%d\n", loc_label);
     wfprintf(out, ".L%d:\n", loc_label+1);
 }
@@ -432,11 +416,7 @@ void gen_code_proc_stmt(FILE *out, stmt_t *stmt) {
         return;
     }
     exp_list_t *exp_list = stmt->stmt.proc_stmt.exp_list;
-    while (exp_list) {
-        gen_code_exp(out, exp_list->exp);
-        wfprintf(out, "\tpushq\t%s\n", regs[gen_code_stack_peek()]);
-        exp_list = exp_list->next;
-    }
+    gen_code_exp_list_push(out, exp_list);
     wfprintf(out, "\tcall\t%s\n", stmt->stmt.proc_stmt.sym_ref->sym);
 }
 

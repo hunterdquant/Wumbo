@@ -18,6 +18,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree);
 void gen_code_exp_op_tree(FILE *out, char * op, exp_tree_t *tree);
 void gen_code_exp_op_regs(FILE *out, char *op, int r1, int r2);
 void gen_code_exp_func(FILE *out, exp_tree_t *tree);
+void gen_code_exp_list_push(FILE *out, exp_list_t *exp_list);
 
 void gen_code_stmt(FILE *out, stmt_t *stmt);
 void gen_code_if_stmt(FILE *out, stmt_t *stmt);
