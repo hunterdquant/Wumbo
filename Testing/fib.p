@@ -13,5 +13,9 @@ program main( input, output );
   end;
 begin
     read(n);
-    write(fib(n))
+    while (n > 0) do 
+    begin
+        write(fib(n));
+        n := n-1
+    end
 end.

@@ -1,3 +1,7 @@
+/*
+    Data structures for expressions.
+*/
+
 #ifndef __EXP_TREE__
 #define __EXP_TREE__
 
@@ -10,16 +14,20 @@ typedef struct exp_list_s exp_list_t;
 struct exp_tree_s;
 typedef struct exp_tree_s exp_tree_t;
 
+// Function call expression.
 typedef struct func_exp_s {
     sym_node_t *sym_ref;
     exp_list_t *args;
 } func_exp_t;
 
+// Array lookup expression.
 typedef struct array_exp_s {
     sym_node_t *sym_ref;
     exp_tree_t *arg;
 } array_exp_t;
 
+// Expression node.
+// Can be float, int, variable, function, array, operator.
 typedef struct exp_node_s {
     exp_type type;
     union {
@@ -32,6 +40,7 @@ typedef struct exp_node_s {
     };
 } exp_node_t;
 
+// Expression tree.
 typedef struct exp_tree_s {
     exp_node_t *node;
     int label;
@@ -39,6 +48,7 @@ typedef struct exp_tree_s {
     struct exp_tree_s *right;
 } exp_tree_t;
 
+// List of expressions.
 typedef struct exp_list_s {
     exp_tree_t *exp;
     exp_list_t *next;

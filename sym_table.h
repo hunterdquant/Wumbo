@@ -1,3 +1,7 @@
+/*
+    Symbol table data structures.
+*/
+
 #ifndef __SYM_TABLE__
 #define __SYM_TABLE__
 
@@ -6,7 +10,7 @@
 #define HASH_SIZE 211
 #define EOS '\0'
 
-
+// Symbol non represents variables, functions, and procedures.
 typedef struct node_s {
     char *sym;
     struct node_s *next;
@@ -20,12 +24,14 @@ typedef struct node_s {
     int depth;
 } sym_node_t;
 
+// The tables stores references to nodes and contains offsets for incoming varables.
 typedef struct table_s {
     long int loc_offset;
     long int arg_offset;
     sym_node_t *table[HASH_SIZE];
 } sym_table_t;
 
+// The stack has a table a reference to the function it belongs to along with its declaration depth. 
 typedef struct stack_s {
     sym_table_t *scope;
     struct stack_s *next;

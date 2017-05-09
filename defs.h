@@ -1,3 +1,7 @@
+/*
+    Enums for struct types.
+*/
+
 #ifndef __DEFS__
 #define __DEFS__
 

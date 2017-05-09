@@ -1,14 +1,20 @@
+/*
+    Contains data structures for type declarations.
+*/
+
 #ifndef __DECL__
 #define __DECL__
 
 #include "defs.h"
 
+// Array data type
 typedef struct data_array_s {
     int start;
     int end;
     simple_type stype;
 } data_array_t;
 
+// Generic variable datatype
 typedef struct data_type_s {
     sym_type type;
     union {
@@ -17,22 +23,25 @@ typedef struct data_type_s {
     };
 } data_type_t;
 
+// List of ids for variable declaration
 typedef struct id_list_s {
     char *id;
     struct id_list_s *next;
 } id_list_t;
 
+// List of data types for variable declaration
 typedef struct data_type_list_s {
     data_type_t *type;
     struct data_type_list_s *next;
 } data_type_list_t;
 
-
+// Type for function declaration
 typedef struct func_type_t {
     data_type_list_t *types;
     ret_type rtype;
 } func_type_t;
 
+// Type for procedure declaration
 typedef struct proc_type_t {
     data_type_list_t *types;
 } proc_type_t;

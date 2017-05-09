@@ -65,7 +65,6 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
     if (!tree) {
         return;
     }
-    wprintf("\n\na%d\n\n", tree->label);
     if (is_leaf(tree)) { // Case 0 - leaf node
         if (tree->node->type == INTEGER_EXP) {
             wfprintf(out, "\tmovq\t$%d,\t%s\n", tree->node->ival, regs[gen_code_stack_peek()]);
@@ -232,7 +231,10 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
         }
         gen_code_stack_push(r);
     } else {
-       // gen_code_exp(tree->right);
+    //    gen_code_exp(out, tree->right);
+    //    wfprintf(out, "\tpushq\t$0\n");
+    //    wfprintf(out, "\tmovq\t%s,\t%%rsi\n", regs[gen_code_stack_peek()]);
+    //    gen_code_exp(out, tree->left);
 
     }
 }

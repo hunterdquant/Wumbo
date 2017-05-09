@@ -1,3 +1,8 @@
+/*
+    Statement data structure.
+
+*/
+
 #ifndef __STMT__
 #define __STMT__
 
@@ -7,6 +12,7 @@
 struct stmt_list_s;
 typedef struct stmt_list_s stmt_list_t;
 
+// The main data structure is a tagged union
 typedef struct stmt_s {
     stmt_type type;
     union {
@@ -38,6 +44,7 @@ typedef struct stmt_s {
     } stmt;
 } stmt_t;
 
+// List of statements.
 struct stmt_list_s {
     stmt_t *stmt;
     struct stmt_list_s *next;

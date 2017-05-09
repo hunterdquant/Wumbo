@@ -1,3 +1,6 @@
+/*
+    Utility functions for error handling and file writting etc.
+*/
 #ifndef __WUMBO_UTILS__
 #define __WUMBO_UTILS__
 

@@ -1,6 +1,3 @@
-/* Context-free grammar for a pseudo Pascal language 
-   grammar G = (Alphabet, Variables, Rules, StartSymbol)
- */
 %{
   #include <stdio.h>
   #include <stdlib.h>
@@ -239,8 +236,8 @@ subprogram_declaration: subprogram_head declarations subprogram_declarations com
 		gen_code_stmt(wout, $4);
 		gen_code_func_end(wout);
 		gen_code_prologue(wout, name);
-		destroy_sym_stack(stack_pop(&sym_table));
 		destroy_stmt($4);
+		destroy_sym_stack(stack_pop(&sym_table));
 	};
 
 subprogram_head: FUNCTION ID 
@@ -306,6 +303,7 @@ parameter_list: identifier_list ':' type
 			list = list->next;
 		}
 		$$ = tmp;
+		destroy_id_list($1);
 	}
 	| parameter_list ';' identifier_list ':' type
 	{
@@ -334,6 +332,7 @@ parameter_list: identifier_list ':' type
 		}
 		cur->next = tmp;
 		$$ = tmp2;
+		destroy_id_list($3);
 	}
 	;
 
@@ -547,6 +546,9 @@ term: factor
 factor: ID
 	{
 		sym_node_t *ref = search_stack(sym_table, $1);
+		if (!ref) {
+			panic("\nSymbol, %s, not found, line %d", $1, LINE_COUNT);
+		}
 		exp_node_t *node = init_exp_node(VAR_EXP, (void *)ref);
 		$$ = init_exp_tree(node);
 	}
@@ -554,7 +556,7 @@ factor: ID
 	{
 		sym_node_t *ref = search_stack(sym_table, $1);
 		if (ref->ntype == PROC_NODE) {
-			panic("\nProcedures have no return value and connot be used in expressions, line %d\n", LINE_COUNT);
+			panic("\nProcedures have no return value and cannot be used in expressions, line %d\n", LINE_COUNT);
 		}
 		func_exp_t *func = init_func_exp(ref, $3);
 		exp_node_t *node = init_exp_node(FUNC_EXP, (void *)func);

@@ -129,6 +129,17 @@ void destroy_sym_node(sym_node_t *node) {
         return;
     }
     destroy_sym_node(node->next);
+    // switch (node->ntype) {
+    //     case PRIM_NODE:
+    //         destroy_data_type(node->dtype);
+    //         break;
+    //     case FUNC_NODE:
+    //         destroy_func_type(node->ftype);
+    //         break;
+    //     case PROC_NODE:
+    //         destroy_proc_type(node->ptype);
+    //         break;
+    // }
     free(node);
 }
 
