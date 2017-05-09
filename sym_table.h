@@ -17,6 +17,7 @@ typedef struct node_s {
         proc_type_t *ptype;
     };
     int offset;
+    int depth;
 } sym_node_t;
 
 typedef struct table_s {
@@ -32,7 +33,7 @@ typedef struct stack_s {
     int depth;
 } sym_stack_t;
 
-sym_node_t *init_sym_node(char *, node_type, void *, int);
+sym_node_t *init_sym_node(char *, node_type, void *, int, int);
 sym_stack_t *init_sym_stack(sym_table_t *, sym_node_t *, int);
 sym_stack_t *stack_pop(sym_stack_t **);
 sym_stack_t *stack_push(sym_stack_t *, sym_table_t *, sym_node_t *);

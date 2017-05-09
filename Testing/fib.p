@@ -1,17 +1,17 @@
 program main( input, output );
   var n: integer;
-  function fact(n:integer):integer;
+  function fib(n:integer):integer;
   begin
-	if (n <= 0) then
+	if (n <= 1) then
     begin
-        fact := 1
+        fib := 1
     end
     else
     begin
-        fact := n*fact(n-1)
+        fib := fib(n-1) + fib(n-2)
     end
   end;
 begin
     read(n);
-    write(fact(n))
+    write(fib(n))
 end.

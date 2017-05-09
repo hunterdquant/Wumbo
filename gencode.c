@@ -5,12 +5,14 @@
 #include "stmt.h"
 #include "defs.h"
 
+extern sym_stack_t *sym_table;
+
 long int label = 0;
 
 int sp = 0;
 int ssize = 9;
 int rstack[] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-char *regs[] = {"%rcx", "%r8", "%r9", "%r10", "%r9", "%r10", "%r11", "%r12", "%r13", "%r14", "%r15"};
+char *regs[] = {"%rcx", "%r8", "%r9", "%r10", "%r11", "%r12", "%r13", "%r14", "%r15"};
 
 void gen_code_begin(FILE *out, char *file_name) {
     wfprintf(out, "\t.file\t\"%s\"\n", file_name);
@@ -25,9 +27,11 @@ void gen_code_end(FILE *out) {
 void gen_code_main(FILE *out, char *entry_name) {
     wfprintf(out, "main:\n");
     wfprintf(out, "\tpushq\t%%rbp\n");
+    wfprintf(out, "\tpushq\t%%rbp\n");
     wfprintf(out, "\tmovq\t%%rsp,\t%%rbp\n");
     wfprintf(out, "\tmovl\t$0,\t%%eax\n");
     wfprintf(out, "\tcall\t%s\n", entry_name);
+    wfprintf(out, "\tpopq\t%%rbp\n");
     wfprintf(out, "\tpopq\t%%rbp\n");
     wfprintf(out, "\tret\n");
 }
@@ -37,9 +41,11 @@ void gen_code_func_begin(FILE *out, sym_node_t *func_ref) {
     wfprintf(out, "\tpushq\t%%rbp\n");
     wfprintf(out, "\tmovq\t%%rsp,\t%%rbp\n");
     wfprintf(out, "\taddq\t$%d,\t%%rsp\n", func_ref->offset);
+    gen_code_push_used_regs(out);
 }
 
 void gen_code_func_end(FILE *out) {
+    gen_code_pop_used_regs(out);
     wfprintf(out, "\tmovq\t%%rbp,\t%%rsp\n");
     wfprintf(out, "\tpopq\t%%rbp\n");
     wfprintf(out, "\tret\n");
@@ -59,6 +65,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
     if (!tree) {
         return;
     }
+    wprintf("\n\na%d\n\n", tree->label);
     if (is_leaf(tree)) { // Case 0 - leaf node
         if (tree->node->type == INTEGER_EXP) {
             wfprintf(out, "\tmovq\t$%d,\t%s\n", tree->node->ival, regs[gen_code_stack_peek()]);
@@ -66,8 +73,14 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             panic("\nGencode doesn't support reals.\n");
         } else if (tree->node->type == FUNC_EXP) {
             gen_code_exp_func(out, tree);
+            wfprintf(out, "\tmovq\t%%rax,\t%s\n", regs[gen_code_stack_peek()]);
         } else if (tree->node->type == VAR_EXP) {
-            wfprintf(out, "\tmovq\t%d(%%rbp),\t%s\n", tree->node->sym_ref->offset, regs[gen_code_stack_peek()]);
+            if (sym_table->depth != tree->node->sym_ref->depth) {
+                gen_code_non_local_access(out, sym_table->depth - tree->node->sym_ref->depth, tree->node->sym_ref->offset, 1);
+                wfprintf(out, "\tmovq\t%%rbx,\t%s\n", regs[gen_code_stack_peek()]);
+            } else {
+                wfprintf(out, "\tmovq\t%d(%%rbp),\t%s\n", tree->node->sym_ref->offset, regs[gen_code_stack_peek()]);
+            }
         } else if (tree->node->type == ARRAY_EXP) {
             panic("\nGencode doesn't support arrays.\n");
         } else {
@@ -86,7 +99,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
                 gen_code_exp_op_tree(out, "subq", tree->right);
                 break;
             case MUL_OP:
-                gen_code_exp_op_tree(out, "imulq", tree->right);
+                gen_code_exp_op_tree(out, "imul", tree->right);
                 break;
             case DIV_OP:
                 if (tree->right->node->type == INTEGER_EXP) {
@@ -107,7 +120,12 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
                 } else if (tree->right->node->type == VAR_EXP) {
                     wfprintf(out, "\tmovq\t%s,\t%%rax\n", regs[gen_code_stack_peek()]);
                     wfprintf(out, "\tmovq\t$0,\t%%rdx\n");
-                    wfprintf(out, "\tidivq\t%d(%%rbp)\n", tree->right->node->sym_ref->offset);
+                    if (sym_table->depth != tree->right->node->sym_ref->depth) {
+                        gen_code_non_local_access(out, sym_table->depth - tree->right->node->sym_ref->depth, tree->right->node->sym_ref->offset, 1);
+                        wfprintf(out, "\tidivq\t%%rbx\n");
+                    } else {
+                        wfprintf(out, "\tidivq\t%d(%%rbp)\n", tree->right->node->sym_ref->offset);
+                    }
                     wfprintf(out, "\tmovq\t%%rax,\t%s\n", regs[gen_code_stack_peek()]);
                 } else if (tree->right->node->type == ARRAY_EXP) {
                     panic("\nGencode doesn't support arrays.\n");
@@ -128,9 +146,9 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
                     panic("\nGencode doesn't support reals.\n");
                 } else if (tree->right->node->type == FUNC_EXP) {
                     gen_code_exp_func(out, tree->right);
-                    wfprintf(out, "\tcmp\t%s,\t%%rax\n", regs[gen_code_stack_peek()], tree->right->node->ival);
+                    wfprintf(out, "\tcmp\t%%rax,\t%s\n", regs[gen_code_stack_peek()]);
                 } else if (tree->right->node->type == VAR_EXP) {
-                    wfprintf(out, "\tcmp\t%d(%%rbp),\t%s\n", regs[gen_code_stack_peek()], tree->right->node->sym_ref->offset);
+                    wfprintf(out, "\tcmp\t%d(%%rbp),\t%s\n", tree->right->node->sym_ref->offset, regs[gen_code_stack_peek()]);
                 } else if (tree->right->node->type == ARRAY_EXP) {
                     panic("\nGencode doesn't support arrays.\n");
                 } else {
@@ -156,7 +174,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
                 gen_code_exp_op_regs(out, "subq", r, gen_code_stack_peek());
                 break;
             case MUL_OP:
-                gen_code_exp_op_regs(out, "imulq", r, gen_code_stack_peek());
+                gen_code_exp_op_regs(out, "imul", r, gen_code_stack_peek());
                 break;
             case DIV_OP:
                 wfprintf(out, "\tmovq\t%s,\t%%rax\n", regs[gen_code_stack_peek()]);
@@ -170,7 +188,6 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-                wprintf("case 3");
                 wfprintf(out, "\tcmp\t%s,\t%s\n", regs[r], regs[gen_code_stack_peek()]);
                 break;
             default:
@@ -194,7 +211,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
                 gen_code_exp_op_regs(out, "subq", gen_code_stack_peek(), r);
                 break;
             case MUL_OP:
-                gen_code_exp_op_regs(out, "imulq", gen_code_stack_peek(), r);
+                gen_code_exp_op_regs(out, "imul", gen_code_stack_peek(), r);
                 break;
             case DIV_OP:
                 wfprintf(out, "\tmovq\t%s,\t%%rax\n", regs[r]);
@@ -208,7 +225,6 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
             case G_OP:
             case LE_OP:
             case GE_OP:
-                wprintf("case 4");
                 wfprintf(out, "\tcmp\t%s,\t%s\n", regs[gen_code_stack_peek()], regs[r]);
                 break;
             default:
@@ -216,6 +232,7 @@ void gen_code_exp(FILE *out, exp_tree_t *tree) {
         }
         gen_code_stack_push(r);
     } else {
+       // gen_code_exp(tree->right);
 
     }
 }
@@ -226,7 +243,9 @@ void gen_code_exp_op_tree(FILE *out, char * op, exp_tree_t *tree) {
     } else if (tree->node->type == REAL_EXP) {
         panic("\nGencode doesn't support reals.\n");
     } else if (tree->node->type == FUNC_EXP) {
+        int r = gen_code_stack_pop();
         gen_code_exp_func(out, tree);
+        gen_code_stack_push(r);
         wfprintf(out, "\t%s\t%%rax,\t%s\n", op, regs[gen_code_stack_peek()]);
     } else if (tree->node->type == VAR_EXP) {
         wfprintf(out, "\t%s\t%d(%%rbp),\t%s\n", op, tree->node->sym_ref->offset, regs[gen_code_stack_peek()]);
@@ -240,7 +259,22 @@ void gen_code_exp_op_tree(FILE *out, char * op, exp_tree_t *tree) {
 void gen_code_exp_func(FILE *out, exp_tree_t *tree) {
     exp_list_t *exp_list = tree->node->func_exp->args;
     gen_code_exp_list_push(out, exp_list);
+    if (sym_table->depth + 1 == tree->node->func_exp->sym_ref->depth) {
+        wfprintf(out, "\tpushq\t%%rbp\n");
+    } else {
+        int i, diff = sym_table->depth - tree->node->func_exp->sym_ref->depth;
+        if (diff < 0) {
+            diff = -diff; 
+        }
+        wfprintf(out, "\tmovq\t16(%%rbp),\t%%rbx\n");
+        for (i = 0; i < diff; i++) {
+            wfprintf(out, "\tmovq\t16(%%rbx),\t%%rbx\n");
+        }
+        wfprintf(out, "\tpushq\t%%rbx\n");
+    }
     wfprintf(out, "\tcall\t%s\n", tree->node->func_exp->sym_ref->sym);
+    wfprintf(out, "\tpopq\t%%rbx\n");
+    gen_code_exp_list_pop(out, exp_list);
 }
 
 void gen_code_exp_list_push(FILE *out, exp_list_t *exp_list) {
@@ -248,8 +282,17 @@ void gen_code_exp_list_push(FILE *out, exp_list_t *exp_list) {
         return;
     }
     gen_code_exp_list_push(out, exp_list->next);
+    gen_code_label_tree(exp_list->exp);
     gen_code_exp(out, exp_list->exp);
     wfprintf(out, "\tpushq\t%s\n", regs[gen_code_stack_peek()]);
+}
+
+void gen_code_exp_list_pop(FILE *out, exp_list_t *exp_list) {
+    if (!exp_list) {
+        return;
+    }
+    gen_code_exp_list_pop(out, exp_list->next);
+    wfprintf(out, "\tpopq\t%%rbx\n");
 }
 
 void gen_code_exp_op_regs(FILE *out, char *op,  int r1, int r2) {
@@ -295,6 +338,7 @@ void gen_code_if_stmt(FILE *out, stmt_t *stmt) {
         panic("\nError in if gencode, expected proc.\n");
     }
     exp_tree_t *tree = stmt->stmt.if_stmt.exp;
+    gen_code_label_tree(tree);
     gen_code_exp(out, tree);
     if (tree->node->type != OP_EXP) {
         panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
@@ -304,44 +348,50 @@ void gen_code_if_stmt(FILE *out, stmt_t *stmt) {
     label+=2;
     switch (tree->node->op) {
         case EQ_OP:
-            wfprintf(out, "\tje\t.L%d\n", loc_label);
-            break;
-        case NEQ_OP:
             wfprintf(out, "\tjne\t.L%d\n", loc_label);
             break;
+        case NEQ_OP:
+            wfprintf(out, "\tje\t.L%d\n", loc_label);
+            break;
         case L_OP:
-            wfprintf(out, "\tjl\t.L%d\n", loc_label);
+            wfprintf(out, "\tjge\t.L%d\n", loc_label);
             break;
         case G_OP:
-            wfprintf(out, "\tjg\t.L%d\n", loc_label);
-            break;
-        case LE_OP:
             wfprintf(out, "\tjle\t.L%d\n", loc_label);
             break;
+        case LE_OP:
+            wfprintf(out, "\tjg\t.L%d\n", loc_label);
+            break;
         case GE_OP:
-            wfprintf(out, "\tjge\t.L%d\n", loc_label);
+            wfprintf(out, "\tjl\t.L%d\n", loc_label);
             break;
         default:
             panic("Invalid operator in gencode, if stmt can't use not or arithmetic ops at root.");
     }
-    if (stmt->stmt.if_stmt.false_stmt) {
-        gen_code_stmt(out, stmt->stmt.if_stmt.false_stmt);
-    }
+    gen_code_stmt(out, stmt->stmt.if_stmt.true_stmt);
     wfprintf(out, "\tjmp\t.L%d\n", loc_label+1);
     wfprintf(out, ".L%d:\n", loc_label);
     loc_label++;
-    gen_code_stmt(out, stmt->stmt.if_stmt.true_stmt);
+    if (stmt->stmt.if_stmt.false_stmt) {
+        gen_code_stmt(out, stmt->stmt.if_stmt.false_stmt);
+    }
     wfprintf(out, ".L%d:\n", loc_label);
 }
 
 void gen_code_assign_stmt(FILE *out, stmt_t *stmt) {
     sym_node_t *node = stmt->stmt.assn_stmt.sym_ref;
     exp_tree_t *tree = stmt->stmt.assn_stmt.exp;
+    gen_code_label_tree(tree);
     gen_code_exp(out, tree);
     if (node->ntype == FUNC_NODE) {
         wfprintf(out, "\tmovq\t%s,\t%%rax\n", regs[gen_code_stack_peek()]);
     } else {
-        wfprintf(out, "\tmovq\t%s,\t%d(%%rbp)\n", regs[gen_code_stack_peek()], node->offset);
+        if (sym_table->depth != node->depth) {
+            gen_code_non_local_access(out, sym_table->depth - node->depth, node->offset, 0);
+            wfprintf(out, "\tmovq\t%s,\t(%%rbx)\n", regs[gen_code_stack_peek()]);
+        } else {
+            wfprintf(out, "\tmovq\t%s,\t%d(%%rbp)\n", regs[gen_code_stack_peek()], node->offset);
+        }
     }
 }
 
@@ -356,6 +406,7 @@ void gen_code_while_stmt(FILE *out, stmt_t *stmt) {
     int loc_label = label;
     label+=2;
     wfprintf(out, ".L%d:\n", loc_label);
+    gen_code_label_tree(tree);
     gen_code_exp(out, tree);
     // Avoids label conflict with recursive calls.
     switch (tree->node->op) {
@@ -394,6 +445,7 @@ void gen_code_for_stmt(FILE *out, stmt_t *stmt) {
     int loc_label = label;
     label+=2;
     wfprintf(out, ".L%d:\n", loc_label);
+    gen_code_label_tree(tree);
     gen_code_exp(out, tree);
     // Avoids label conflict with recursive calls.
     wfprintf(out, "\tcmp\t\t%d(%%rbp),%s\n", stmt->stmt.for_stmt.assign_stmt->stmt.assn_stmt.sym_ref->offset, regs[gen_code_stack_peek()]);
@@ -417,7 +469,23 @@ void gen_code_proc_stmt(FILE *out, stmt_t *stmt) {
     }
     exp_list_t *exp_list = stmt->stmt.proc_stmt.exp_list;
     gen_code_exp_list_push(out, exp_list);
+    if (sym_table->depth + 1 == stmt->stmt.proc_stmt.sym_ref->depth) {
+        wfprintf(out, "\tpushq\t%%rbp\n");
+    } else {
+        int i, diff = sym_table->depth - stmt->stmt.proc_stmt.sym_ref->depth;
+        if (diff < 0) {
+            diff = -diff; 
+        }
+        wfprintf(out, "\tmovq\t16(%%rbp),\t%%rbx\n");
+        for (i = 0; i < diff; i++) {
+            wfprintf(out, "\tmovq\t16(%%rbx),\t%%rbx\n");
+        }
+        wfprintf(out, "\tpushq\t%%rbx\n");
+    }
     wfprintf(out, "\tcall\t%s\n", stmt->stmt.proc_stmt.sym_ref->sym);
+    wfprintf(out, "\tpopq\t%%rbx\n");
+    gen_code_exp_list_pop(out, exp_list);
+
 }
 
 void gen_code_read(FILE *out, stmt_t *stmt) {
@@ -431,8 +499,13 @@ void gen_code_read(FILE *out, stmt_t *stmt) {
 
 void gen_code_write(FILE *out, stmt_t *stmt) {
     exp_tree_t *tree = stmt->stmt.proc_stmt.exp_list->exp;
+    gen_code_label_tree(tree);
     gen_code_exp(out, tree);
-    wfprintf(out, "\tmovq\t%s,\t%%rsi\n", regs[gen_code_stack_peek()]);
+    if (tree->node->type == FUNC_EXP) {
+        wfprintf(out, "\tmovq\t%%rax,\t%%rsi\n");
+    } else {
+        wfprintf(out, "\tmovq\t%s,\t%%rsi\n", regs[gen_code_stack_peek()]);
+    }
     wfprintf(out, "\tmovq\t$.LC1,\t%%rdi\n");
     wfprintf(out, "\tmovq\t$0,\t%%rax\n");
     wfprintf(out, "\tcall\tprintf\n");
@@ -440,12 +513,12 @@ void gen_code_write(FILE *out, stmt_t *stmt) {
 
 void gen_code_read_label(FILE *out) {
     wfprintf(out, ".LC0:\n");
-    wfprintf(out, "\t.string\t\"%%d\"\n");
+    wfprintf(out, "\t.string\t\"%%ld\"\n");
 }
 
 void gen_code_write_label(FILE *out) {
     wfprintf(out, ".LC1:\n");
-    wfprintf(out, "\t.string\t\"%%d\\n\"\n");
+    wfprintf(out, "\t.string\t\"%%ld\\n\"\n");
 }
 
 int is_leaf(exp_tree_t *tree) {
@@ -459,24 +532,26 @@ int is_leaf(exp_tree_t *tree) {
 }
 
 void gen_code_label_tree(exp_tree_t *tree) {
-    if (!tree) {
+    if (!tree || is_leaf(tree)) {
         return;
     }
+
     gen_code_label_tree(tree->left);
     gen_code_label_tree(tree->right);
-    if (is_leaf(tree->right)) {
-        tree->right->label = 0;
-    } else if (is_leaf(tree->left)) {
+    if (is_leaf(tree->left)) {
         tree->left->label = 1;
-    } else if (tree->left && tree->right) {
-        if (tree->left->label > tree->right->label) {
+    } else if (is_leaf(tree->right)) {
+        tree->right->label = 0;
+    }
+    if (tree->left && tree->right) {
+        if (tree->left->label == tree->right->label) {
             tree->label = tree->left->label + 1;
         } else {
             tree->label = (tree->left->label >= tree->right->label) ? tree->left->label : tree->right->label;
         }
     } else if (tree->left) {
         tree->label = tree->left->label;
-    } else {
+    } else if (tree->right) {
         tree->label = tree->right->label;
     }
 }
@@ -491,7 +566,7 @@ int gen_code_stack_push(int entry) {
     return rstack[sp];
 }
 int gen_code_stack_pop() {
-    if (sp == 10) {
+    if (sp == ssize) {
         panic("\nInvalid stack pop in gencode\n");
     }
     int tmp = rstack[sp];
@@ -507,4 +582,39 @@ void gen_code_stack_swap() {
     int tmp2 = gen_code_stack_pop();
     gen_code_stack_push(tmp1);
     gen_code_stack_push(tmp2);
+}
+
+void gen_code_push_used_regs(FILE *out) {
+    int i;
+    for (i = 0; i < ssize; i++) {
+        wfprintf(out, "\tpushq\t%s\n", regs[i]);
+    }
+}
+
+void gen_code_pop_used_regs(FILE *out) {
+    int i;
+    for (i = ssize-1; i >= 0; i--) {
+        wfprintf(out, "\tpopq\t%s\n", regs[i]);
+    }
+}
+
+void gen_code_non_local_access(FILE *out, int depth, int offset, int read) {
+    wfprintf(out, "\tmovq\t16(%%rbp),\t%%rbx\n");
+    int i;
+    for (i = 1; i < depth; i++) {
+        wfprintf(out, "\tmovq\t16(%%rbx),\t%%rbx\n");
+    }
+    if (read) {
+        if (offset < 0) {
+            wfprintf(out, "\tmovq\t%d(%%rbx),\t%%rbx\n", offset);
+        } else {
+            wfprintf(out, "\tmovq\t%d(%%rbx),\t%%rbx\n", offset);
+        }
+    } else {
+        if (offset < 0) {
+            wfprintf(out, "\tleaq\t%d(%%rbx),\t%%rbx\n", offset);
+        } else {
+            wfprintf(out, "\tleaq\t%d(%%rbx),\t%%rbx\n", offset);
+        }
+    }
 }

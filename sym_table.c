@@ -60,7 +60,7 @@ sym_table_t *init_sym_table() {
     int i;
     sym_table_t *tmp = (sym_table_t*) malloc(sizeof(sym_table_t));
     tmp->loc_offset = 0;
-    tmp->arg_offset = 8;
+    tmp->arg_offset = 16;
     for (i = 0; i < HASH_SIZE; i++) {
         tmp->table[i] = NULL;
     }
@@ -103,12 +103,13 @@ sym_node_t *table_get(sym_table_t *t, char *sym) {
     return cur;
 }
 
-sym_node_t *init_sym_node(char *sym, node_type ntype, void *type, int offset) {
+sym_node_t *init_sym_node(char *sym, node_type ntype, void *type, int offset, int depth) {
     sym_node_t *n = (sym_node_t*)malloc(sizeof(sym_node_t));
     n->next = NULL;
     n->sym = strdup(sym);
     n->offset = offset;
     n->ntype = ntype;
+    n->depth = depth;
     switch (n->ntype) {
         case PRIM_NODE:
             n->dtype = (data_type_t *)type;

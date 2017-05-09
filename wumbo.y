@@ -110,13 +110,13 @@ program:
 			if (!in && strcmp(id_list->id, "input")) {
 				in = !in;
 				proc_type_t *input = init_proc_type(init_data_type_list(init_data_type(SIMPLE_SYM, (void *)INTEGER_TYPE)));
-				sym_node_t *node = init_sym_node("read", PROC_NODE, input, 0);
+				sym_node_t *node = init_sym_node("read", PROC_NODE, input, 0, sym_table->depth+1);
 				table_put(sym_table->scope, node);
 				gen_code_read_label(wout);
 			} else if (!out && strcmp(id_list->id, "output")) {
 				out = !out;
 				proc_type_t *output = init_proc_type(init_data_type_list(init_data_type(SIMPLE_SYM, (void *)INTEGER_TYPE)));
-				sym_node_t *node = init_sym_node("write", PROC_NODE, output, 0);
+				sym_node_t *node = init_sym_node("write", PROC_NODE, output, 0, sym_table->depth+1);
 				table_put(sym_table->scope, node);
 				gen_code_write_label(wout);
 			}
@@ -133,7 +133,7 @@ program:
 			name = $2;
 		}
 		proc_type_t *main = init_proc_type(init_data_type_list(init_data_type(SIMPLE_SYM, (void *)NULL)));
-		sym_node_t *node = init_sym_node(name, PROC_NODE, main, sym_table->scope->loc_offset);
+		sym_node_t *node = init_sym_node(name, PROC_NODE, main, sym_table->scope->loc_offset, sym_table->depth+1);
 		table_put(sym_table->scope, node);
 		sym_table->sym_ref = node;
 	}
@@ -192,7 +192,7 @@ declarations: declarations VAR identifier_list ':' type ';'
 				panic("\nSymbol, %s, is defined more than once at line number %d.\n", list->id, LINE_COUNT);
 			}
 			sym_table->scope->loc_offset-=8;
-			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, $5, sym_table->scope->loc_offset);
+			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, $5, sym_table->scope->loc_offset, sym_table->depth);
 			table_put(sym_table->scope, node);
 			list = list->next;
 		}
@@ -254,7 +254,7 @@ subprogram_head: FUNCTION ID
 	{
 		sym_stack_t *tmp = stack_pop(&sym_table);
 		func_type_t *func = init_func_type($4, $6);
-		sym_node_t *node = init_sym_node(strdup($2), FUNC_NODE, func, 0);
+		sym_node_t *node = init_sym_node(strdup($2), FUNC_NODE, func, 0, sym_table->depth+1);
 		table_put(sym_table->scope, node);
 		sym_table = stack_push(sym_table, tmp->scope, table_put(sym_table->scope, node));
 	}
@@ -270,7 +270,7 @@ subprogram_head: FUNCTION ID
 	{
 		sym_stack_t *tmp = stack_pop(&sym_table);
 		proc_type_t *proc = init_proc_type($4);
-		sym_node_t *node = init_sym_node(strdup($2), PROC_NODE, proc, 0);
+		sym_node_t *node = init_sym_node(strdup($2), PROC_NODE, proc, 0, sym_table->depth+1);
 		sym_table = stack_push(sym_table, tmp->scope, table_put(sym_table->scope, node));
 	}
 	;
@@ -291,7 +291,7 @@ parameter_list: identifier_list ':' type
 		id_list_t *list = $1;
 		while (list) {
 			sym_table->scope->arg_offset+=8;
-			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, type, sym_table->scope->arg_offset);
+			sym_node_t *node = init_sym_node(list->id, PRIM_NODE, type, sym_table->scope->arg_offset, sym_table->depth);
 			table_put(sym_table->scope, node);
 			list = list->next;
 		}
@@ -313,7 +313,7 @@ parameter_list: identifier_list ':' type
 		id_list_t *list = $3;
 		while (list) {
 			sym_table->scope->arg_offset+=8;
-			sym_node_t *node = init_sym_node(strdup(list->id), PRIM_NODE, type, sym_table->scope->arg_offset);
+			sym_node_t *node = init_sym_node(strdup(list->id), PRIM_NODE, type, sym_table->scope->arg_offset, sym_table->depth);
 			table_put(sym_table->scope, node);
 			list = list->next;
 		}
